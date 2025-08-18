@@ -25,6 +25,7 @@ annotations.json
 
 # 影片存放資料夾，影片通常體積龐大，不適合儲存在 Git 中
 uploads/
+yolo_dataset/images
 
 # 模型訓練相關的資料與模型權重
 # 根據您提供的 tree.txt 結構，這些資料夾也不應該上傳
