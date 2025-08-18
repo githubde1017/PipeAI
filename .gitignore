@@ -1,0 +1,34 @@
+# Python 自動產生的暫存檔案
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虛擬環境資料夾
+venv/
+.venv/
+env/
+
+# 環境變數
+.env
+
+# IDE 或編輯器自動產生的設定檔與快取
+.idea/
+.vscode/
+.DS_Store
+
+# Flask 專案特定檔案
+instance/
+
+# 專案運行時產生的動態資料與大型檔案，不應上傳至 Git
+# 請確保在分享專案時， annotations.json 應為空或只包含範例
+annotations.json
+
+# 影片存放資料夾，影片通常體積龐大，不適合儲存在 Git 中
+uploads/
+
+# 模型訓練相關的資料與模型權重
+# 根據您提供的 tree.txt 結構，這些資料夾也不應該上傳
+backups/
+dataset/
+extract/
+runs/

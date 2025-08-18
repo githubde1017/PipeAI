@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PipeAI 影片標註平台</title>
+<style>
+    body { 
+        font-family: Arial, sans-serif; 
+        display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        background-color: #f0f2f5; 
+    }
+    #app { 
+        display: flex; 
+        width: 90%; 
+        max-width: 1200px; 
+        margin-top: 20px; 
+        gap: 20px; 
+    }
+    #video-viewer { 
+        position: relative; 
+        flex: 3; 
+    }
+    #video-player { 
+        width: 100%; 
+        height: auto; 
+        display: block; 
+    }
+    #canvas { 
+        position: absolute; 
+        top: 0; 
+        left: 0; 
+        /* 預設狀態下，讓滑鼠事件穿透 */
+        pointer-events: none; 
+        border: 2px solid #007bff; 
+    }
+    #sidebar { 
+        flex: 1; 
+        padding: 20px; 
+        border: 1px solid #ccc; 
+        background-color: #fff; 
+        border-radius: 8px; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+    }
+    #controls { 
+        margin-top: 20px; 
+        text-align: center; 
+        width: 90%; 
+        max-width: 1200px;
+    }
+    .label-item { 
+        margin-bottom: 10px; 
+    }
+    #video-controls { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        margin-top: 10px; 
+    }
+    /* 只有當父元素有 drawing-mode 類別時，畫布才響應滑鼠事件 */
+    .drawing-mode #canvas {
+        pointer-events: auto;
+        cursor: crosshair;
+    }
+    .labels-list {
+        margin-top: 10px;
+    }
+    .labels-list-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 5px;
+        border-bottom: 1px solid #eee;
+    }
+    .mode-button {
+        padding: 8px 12px;
+        cursor: pointer;
+        border: 1px solid #ccc;
+        background-color: #f0f0f0;
+        margin-right: 5px;
+    }
+    .mode-button.active {
+        background-color: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+    .custom-label-input {
+        display: flex;
+        margin-top: 5px;
+    }
+    .custom-label-input input {
+        flex-grow: 1;
+        margin-right: 5px;
+        padding: 5px;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+    }
+    .custom-label-input button {
+        padding: 5px 10px;
+        border: none;
+        background-color: #28a745;
+        color: white;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+</style>
+</head>
+<body>
+    <h1>PipeAI 影片標註工具</h1>
+    <div id="app">
+        <div id="video-viewer">
+            <video id="video-player" controls></video>
+            <canvas id="canvas"></canvas>
+        </div>
+        <div id="sidebar">
+            <h3>標註資訊</h3>
+            <div id="labels-container" class="labels-list"></div>
+            <hr>
+            <h4>新增標籤</h4>
+            <div class="label-item custom-label-input">
+                <input type="text" id="custom-label-name" placeholder="輸入新標籤名稱">
+                <button onclick="addCustomLabel()">新增</button>
+            </div>
+            <hr>
+            <h4>選擇標籤</h4>
+            <div class="label-item">
+                <label for="label-name-select">標籤名稱:</label>
+                <select id="label-name-select"></select>
+            </div>
+            <div class="label-item">
+                <p>標註模式 (<span style="font-weight:bold;">按 Esc 退出</span>):</p>
+                <div style="display:flex;">
+                    <button class="mode-button" id="bbox-mode-btn" onclick="setAnnotationMode('bbox')">矩形框</button>
+                    <button class="mode-button" id="water-mode-btn" onclick="setAnnotationMode('water_level')">積水線段</button>
+                </div>
+            </div>
+            <div style="display:flex; justify-content: space-between;">
+                <button onclick="saveAnnotation()">儲存標註</button>
+                <button onclick="clearAnnotations()">清除所有標記</button>
+            </div>
+        </div>
+    </div>
+        <div id="controls">
+            <div class="control-group">
+                <label for="video-select">選擇影片：</label>
+                <select id="video-select"></select>
+            </div>
+            <div class="control-group">
+                <label for="video-upload">或上傳新影片：</label>
+                <input type="file" id="video-upload" accept="video/mp4,video/mov,video/avi">
+                <button id="upload-btn">上傳</button>
+            </div>
+        <div id="video-controls">
+            <span id="current-time">00:00</span>
+            <button onclick="saveAnnotationAndNextFrame()">儲存並到下一幀</button>
+        </div>
+    </div>
+
+<script>
+    const videoPlayer = document.getElementById('video-player');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const labelsContainer = document.getElementById('labels-container');
+    const currentTimeDisplay = document.getElementById('current-time');
+    const videoViewer = document.getElementById('video-viewer');
+    const bboxModeBtn = document.getElementById('bbox-mode-btn');
+    const waterModeBtn = document.getElementById('water-mode-btn');
+    const labelNameSelect = document.getElementById('label-name-select');
+    const customLabelInput = document.getElementById('custom-label-name');
+    const videoSelect = document.getElementById('video-select');
+
+    let isDrawing = false;
+    let startX, startY;
+    let annotations = [];
+    let currentMode = null;
+    let videoFilename = '';
+    let isAnnotationMode = false;
+    let availableLabels = [];
+
+    // ====== 新增的功能：影片清單載入與切換 ======
+    async function loadVideoList() {
+        try {
+            const response = await fetch('/list_videos');
+            const videoFiles = await response.json();
+            
+            videoSelect.innerHTML = ''; // 清空舊選項
+            if (videoFiles.length === 0) {
+                const option = document.createElement('option');
+                option.textContent = '沒有可用的影片';
+                videoSelect.appendChild(option);
+                return;
+            }
+
+            videoFiles.forEach(filename => {
+                const option = document.createElement('option');
+                option.value = filename;
+                option.textContent = filename;
+                videoSelect.appendChild(option);
+            });
+
+            // 載入清單後，自動載入第一個影片
+            videoFilename = videoFiles[0];
+            videoPlayer.src = `/videos/${videoFilename}`;
+            videoPlayer.load();
+
+        } catch (error) {
+            console.error('無法載入影片清單:', error);
+            const option = document.createElement('option');
+            option.textContent = '載入影片清單失敗';
+            videoSelect.appendChild(option);
+        }
+    }
+    
+    function loadSelectedVideo() {
+        videoFilename = videoSelect.value;
+        videoPlayer.src = `/videos/${videoFilename}`;
+        videoPlayer.load();
+        clearAnnotations(); // 清空舊的標註
+        toggleAnnotationMode(false); // 退出標註模式
+    }
+
+    // ====== 舊有功能的調整 ======
+    function syncCanvasSize() {
+        const videoRect = videoPlayer.getBoundingClientRect();
+        canvas.width = videoRect.width;
+        canvas.height = videoRect.height;
+        redrawAnnotations();
+    }
+
+    function updateLabelSelect() {
+        labelNameSelect.innerHTML = '';
+        availableLabels.forEach(label => {
+            const option = document.createElement('option');
+            option.value = label;
+            option.textContent = label;
+            labelNameSelect.appendChild(option);
+        });
+    }
+    
+    function addCustomLabel() {
+        const newLabel = customLabelInput.value.trim();
+        if (newLabel && !availableLabels.includes(newLabel)) {
+            availableLabels.push(newLabel);
+            updateLabelSelect();
+            customLabelInput.value = '';
+            labelNameSelect.value = newLabel;
+        } else if (newLabel) {
+            alert('標籤名稱已存在！');
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        fetch('/class_config')
+            .then(response => response.json())
+            .then(data => {
+                availableLabels = data.names;
+                updateLabelSelect();
+            });
+        
+        // 頁面載入時自動載入影片清單
+        loadVideoList();
+    });
+
+    function setAnnotationMode(mode) {
+        currentMode = mode;
+        toggleAnnotationMode(true);
+        
+        bboxModeBtn.classList.remove('active');
+        waterModeBtn.classList.remove('active');
+        if (mode === 'bbox') {
+            bboxModeBtn.classList.add('active');
+        } else if (mode === 'water_level') {
+            waterModeBtn.classList.add('active');
+        }
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isAnnotationMode) {
+            toggleAnnotationMode(false);
+        }
+    });
+
+    function toggleAnnotationMode(enabled) {
+        isAnnotationMode = enabled;
+        if (enabled) {
+            videoViewer.classList.add('drawing-mode');
+            videoPlayer.pause();
+        } else {
+            videoViewer.classList.remove('drawing-mode');
+            isDrawing = false;
+            currentMode = null;
+            
+            bboxModeBtn.classList.remove('active');
+            waterModeBtn.classList.remove('active');
+        }
+    }
+    
+    videoPlayer.addEventListener('loadedmetadata', () => {
+        syncCanvasSize();
+    });
+
+    window.addEventListener('resize', syncCanvasSize);
+
+    videoPlayer.addEventListener('timeupdate', () => {
+        const time = videoPlayer.currentTime;
+        const minutes = Math.floor(time / 60);
+        const seconds = Math.floor(time % 60);
+        currentTimeDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    });
+
+    canvas.addEventListener('mousedown', (e) => {
+        if (!isAnnotationMode) return;
+        isDrawing = true;
+        const rect = canvas.getBoundingClientRect();
+        startX = e.clientX - rect.left;
+        startY = e.clientY - rect.top;
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        if (!isDrawing) return;
+        const rect = canvas.getBoundingClientRect();
+        let mouseX = e.clientX - rect.left;
+        let mouseY = e.clientY - rect.top;
+
+        mouseX = Math.max(0, Math.min(mouseX, canvas.width));
+        mouseY = Math.max(0, Math.min(mouseY, canvas.height));
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        redrawAnnotations();
+        
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = 2;
+        
+        if (currentMode === 'bbox') {
+            ctx.strokeRect(startX, startY, mouseX - startX, mouseY - startY);
+        } else if (currentMode === 'water_level') {
+            ctx.beginPath();
+            ctx.moveTo(0, startY);
+            ctx.lineTo(canvas.width, startY);
+            ctx.stroke();
+        }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+        if (!isDrawing || !isAnnotationMode) return;
+        isDrawing = false;
+        
+        const rect = canvas.getBoundingClientRect();
+        let endX = e.clientX - rect.left;
+        let endY = e.clientY - rect.top;
+
+        endX = Math.max(0, Math.min(endX, canvas.width));
+        endY = Math.max(0, Math.min(endY, canvas.height));
+
+        const label = labelNameSelect.value;
+        let annotation = null;
+        
+        if (currentMode === 'bbox') {
+            const x = Math.min(startX, endX);
+            const y = Math.min(startY, endY);
+            const width = Math.abs(endX - startX);
+            const height = Math.abs(endY - startY);
+            if (width > 5 && height > 5) {
+                annotation = { type: 'bbox', x, y, width, height, label };
+            }
+        } else if (currentMode === 'water_level') {
+            const y = Math.max(0, Math.min(startY, canvas.height));
+            annotation = { type: 'water_level', y: y, label };
+        }
+        
+        if (annotation) {
+            annotations.push(annotation);
+            addLabelToList(annotation);
+            redrawAnnotations();
+        }
+    });
+
+    function redrawAnnotations() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        annotations.forEach(ann => {
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            if (ann.type === 'bbox') {
+                ctx.strokeRect(ann.x, ann.y, ann.width, ann.height);
+            } else if (ann.type === 'water_level') {
+                ctx.beginPath();
+                ctx.moveTo(0, ann.y);
+                ctx.lineTo(canvas.width, ann.y);
+                ctx.stroke();
+            }
+        });
+    }
+
+    function addLabelToList(ann) {
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'labels-list-item';
+        labelDiv.textContent = `${ann.label}: ${ann.type}`;
+        
+        const deleteButton = document.createElement('button');
+        deleteButton.textContent = 'X';
+        deleteButton.onclick = () => {
+            const index = annotations.indexOf(ann);
+            if (index > -1) {
+                annotations.splice(index, 1);
+                labelDiv.remove();
+                redrawAnnotations();
+            }
+        };
+        
+        labelDiv.appendChild(deleteButton);
+        labelsContainer.appendChild(labelDiv);
+    }
+
+    function clearAnnotations() {
+        annotations = [];
+        labelsContainer.innerHTML = '';
+        redrawAnnotations();
+    }
+
+    function uploadVideo() {
+        const fileInput = document.getElementById('video-upload');
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        fetch('/upload_video', {
+            method: 'POST',
+            body: formData
+        }).then(response => response.json())
+          .then(data => {
+              if (data.filename) {
+                  loadVideoList(); // 上傳成功後重新載入清單
+                  alert('影片上傳成功！');
+              }
+          });
+    }
+
+    function saveAnnotation() {
+        if (annotations.length > 0) {
+            const data = {
+                video: videoFilename,
+                timestamp: videoPlayer.currentTime,
+                annotations: annotations
+            };
+            fetch('/annotations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            }).then(response => response.json())
+              .then(result => {
+                console.log(result.message);
+                clearAnnotations();
+                toggleAnnotationMode(false);
+            });
+        }
+    }
+    
+    function saveAnnotationAndNextFrame() {
+        saveAnnotation();
+        videoPlayer.currentTime += 1/30;
+    }
+
+    // 新增事件監聽器，用於處理下拉選單的選擇
+    videoSelect.onchange = loadSelectedVideo;
+</script>
+</body>
+</html>

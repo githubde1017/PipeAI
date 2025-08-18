@@ -1,0 +1,15 @@
+# 文件名稱: yolo_dataset.yaml
+path: ./yolo_dataset
+train: images
+val: images
+nc: 12
+names: ['裂縫', '積水線段', '異物', 
+        '人孔蓋',
+        '人孔',
+        '導槽溝',
+        '管銜接',
+        '銜接處',
+        'RC',
+        'RC附著',
+        '終點槽底',
+        'END']

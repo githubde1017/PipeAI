@@ -1,0 +1,21 @@
+# 文件名稱: docker-compose.yml
+version: '3.8'
+
+services:
+  app:
+    # 讓 Docker 在專案根目錄尋找檔案，並使用 app/Dockerfile
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    # 將容器的 5000 port 對應到主機的 5000 port
+    ports:
+      - "5000:5000"
+    # 將主機的 dataset 資料夾掛載到容器內，這樣容器內的程式就能讀取資料
+    volumes:
+      - ./dataset:/app/dataset
+      - ./uploads:/app/uploads
+      - ./annotations.json:/app/annotations.json
+      - ./class_config.json:/app/class_config.json
+    # 設定環境變數
+    environment:
+      - FLASK_ENV=development

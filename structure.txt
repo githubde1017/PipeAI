@@ -1,0 +1,13 @@
+PipeAI/
+├── app/
+│   ├── templates/
+│   │   └── index.html
+│   └── app.py
+├── uploads/
+├── venv/
+├── annotations.json
+├── convert_annotations.py
+├── docker-compose.yml
+├── requirements.txt
+├── train_yolo.py
+└── yolo_dataset/

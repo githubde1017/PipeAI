@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>影片標註工具</title>
+<style>
+    body { 
+        font-family: sans-serif; 
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background-color: #f0f2f5; /* 柔和的背景色 */
+    }
+    .container { 
+        position: relative; 
+        width: 80%; 
+        max-width: 800px; 
+        margin: 20px auto; 
+    }
+    #video { 
+        width: 100%; 
+        height: auto; 
+        display: block;
+    }
+    #video-canvas { 
+        position: absolute; 
+        top: 0; 
+        left: 0;
+        border: 2px solid #007bff; /* 明顯的藍色邊框 */
+        cursor: crosshair; /* 游標變為十字形 */
+    }
+    .controls { 
+        margin-top: 20px;
+        width: 80%;
+        max-width: 800px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    #video-select { 
+        width: auto;
+        flex-grow: 1; /* 讓下拉選單填滿可用空間 */
+        padding: 8px;
+        border-radius: 4px;
+    }
+    #save-btn {
+        padding: 8px 16px;
+        border: none;
+        background-color: #28a745;
+        color: white;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    #status-message {
+        margin-left: 10px;
+        color: #555;
+    }
+</style>
+</head>
+<body>
+
+    <h1>影片標註工具</h1>
+    
+    <label for="video-select">選擇影片:</label>
+    <select id="video-select">
+        {% for video in videos %}
+            <option value="{{ video }}">{{ video }}</option>
+        {% endfor %}
+    </select>
+
+    <div class="container">
+        <video id="video" controls></video>
+        <canvas id="video-canvas"></canvas>
+    </div>
+
+<div class="controls">
+    標註標籤: <select id="label-select"></select>
+    <button id="annotate-btn">開始標註</button>
+    <button id="save-btn">儲存標註</button>
+</div>
+<p id="status-message"></p>
+
+    <script src="{{ url_for('static', filename='annotator.js') }}"></script>
+
+</body>
+</html>
